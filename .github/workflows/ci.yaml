@@ -55,15 +55,18 @@ jobs:
           load: true
       - name: Scan image
         uses: anchore/scan-action@v6
+        id: scan
         with:
           image: "${{ secrets.DOCKERHUB_USERNAME }}/test-repo:${{ github.run_id }}"
           fail-build: false
           severity-cutoff: critical
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/test-repo:${{ github.run_id }}
+      - name: Inspect action SARIF report
+        run: cat ${{ steps.scan.outputs.sarif }}
+      # - name: Build and push
+      #   uses: docker/build-push-action@v6
+      #   with:
+      #     push: true
+      #     tags: ${{ secrets.DOCKERHUB_USERNAME }}/test-repo:${{ github.run_id }}
 
   update-tag-in-helm-chart:
     runs-on: ubuntu-latest
