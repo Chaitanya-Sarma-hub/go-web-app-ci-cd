@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: chaitanyasarmaampolu579/test-repo
   pullPolicy: IfNotPresent
-  tag: '12610987267'
+  tag: '12611613375'
 
 ingress:
   enabled: false
