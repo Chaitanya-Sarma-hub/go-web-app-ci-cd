@@ -11,44 +11,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '14'
+      - name: Install jq
+        run: sudo apt-get install -y jq
 
-      - name: Install dependencies
-        run: npm install @octokit/rest
+      - name: Get OAuth Token
+        id: get-token
+        run: |
+          response=$(curl -s -X POST -u "${{ secrets.CLIENT_ID }}:${{ secrets.CLIENT_SECRET }}" \
+            -d "grant_type=client_credentials" \
+            https://github.com/login/oauth/access_token)
+          echo "::set-output name=token::$(echo $response | jq -r '.access_token')"
 
       - name: Post comment
         env:
-          APP_ID: ${{ secrets.APP_ID }}
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          OAUTH_TOKEN: ${{ steps.get-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          node -e "
-          const { Octokit } = require('@octokit/rest');
-          const { createAppAuth } = require('@octokit/auth-app');
-
-          const octokit = new Octokit({
-            authStrategy: createAppAuth,
-            auth: {
-              appId: process.env.APP_ID,
-              privateKey: process.env.PRIVATE_KEY,
-              clientId: process.env.CLIENT_ID,
-              clientSecret: process.env.CLIENT_SECRET,
-              installationId: process.env.GITHUB_INSTALLATION_ID,
-            },
-          });
-
-          const comment = 'Thank you for your contribution!';
-          const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
-          const issue_number = process.env.GITHUB_EVENT_PULL_REQUEST_NUMBER;
-
-          octokit.issues.createComment({
-            owner,
-            repo,
-            issue_number,
-            body: comment,
-          });
-          "
+          curl -H "Authorization: token $OAUTH_TOKEN" \
+               -X POST \
+               -d '{"body": "Thank you for your contribution!"}' \
+               https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$GITHUB_EVENT_PULL_REQUEST_NUMBER/comments
