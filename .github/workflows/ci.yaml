@@ -1,87 +1,19 @@
-name: CI
+name: Comment on PR
 
 on:
-  push:
-    branches:
-      - master
-    paths-ignore:
-      - 'README.md'
-      - 'helm/**'
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 jobs:
-  build:
+  comment:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Go 1.22
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.22
-      - name: Build
-        run: go build -o go-web-app
-      - name: Test
-        run: go test ./...
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-  code-quality:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.60
-
-  push:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: build local container
-        uses: docker/build-push-action@v6
-        with:
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/test-repo:${{ github.run_id }}
-          push: false
-          load: true
-      - name: Scan image
-        uses: anchore/scan-action@v6
-        id: scan
-        with:
-          image: "${{ secrets.DOCKERHUB_USERNAME }}/test-repo:${{ github.run_id }}"
-          fail-build: false
-          severity-cutoff: critical
-      - name: Inspect action SARIF report
-        run: cat ${{ steps.scan.outputs.sarif }}
-      # - name: Build and push
-      #   uses: docker/build-push-action@v6
-      #   with:
-      #     push: true
-      #     tags: ${{ secrets.DOCKERHUB_USERNAME }}/test-repo:${{ github.run_id }}
-
-  update-tag-in-helm-chart:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.TOKEN }}
-      - name: Update Tag in Helm Chart
+      - name: Post comment
         run: |
-          sed -i "s|tag: .*|tag: '${{ github.run_id }}'|g" helm/go-web-app-chart/values.yaml
-      - name: Commit and Push Changes
-        run: |
-          git config --global user.email "iamsarma030@gmail.com"
-          git config --global user.name "Chaitanya Sarma"
-          git add helm/go-web-app-chart/values.yaml
-          git commit -m "Update tag in Helm Chart"
-          git push
+          curl -H "Authorization: token ${{ github.token }}" \
+               -X POST \
+               -d '{"body": "Thank you for your contribution!"}' \
+               https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments
