@@ -14,21 +14,23 @@ jobs:
       - name: Install jq
         run: sudo apt-get install -y jq
 
-      - name: Get OAuth Token
-        id: get-token
-        run: |
-          response=$(curl -s -X POST -u "${{ secrets.CLIENT_ID }}:${{ secrets.CLIENT_SECRET }}" \
-            -d "grant_type=client_credentials" \
-            https://github.com/login/oauth/access_token)
-          echo "::set-output name=token::$(echo $response | jq -r '.access_token')"
-
       - name: Post comment
         env:
-          OAUTH_TOKEN: ${{ steps.get-token.outputs.token }}
+          APP_ID: ${{ secrets.APP_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          curl -H "Authorization: token $OAUTH_TOKEN" \
-               -X POST \
-               -d '{"body": "Thank you for your contribution!"}' \
-               https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$GITHUB_EVENT_PULL_REQUEST_NUMBER/comments
+          # Create JWT token
+          jwt_token=$(echo -n '{"alg":"RS256","typ":"JWT"}' | base64)'.'$(echo -n '{"iat":'$(date +%s)',"exp":'$(($(date +%s) + 600))',"iss":'${APP_ID}'}' | base64)'.'$(echo -n '{"alg":"RS256","typ":"JWT"}' | base64 -d | openssl dgst -sha256 -sign <(echo "$PRIVATE_KEY") | base64)
+
+          # Get installation ID
+          installation_id=$(curl -s -H "Authorization: Bearer $jwt_token" -H "Accept: application/vnd.github.v3+json" https://api.github.com/app/installations | jq '.[0].id')
+
+          # Create installation access token
+          access_token=$(curl -s -X POST -H "Authorization: Bearer $jwt_token" -H "Accept: application/vnd.github.v3+json" https://api.github.com/app/installations/$installation_id/access_tokens | jq -r '.token')
+
+          # Post comment
+          curl -H "Authorization: token $access_token" -X POST -d '{"body": "Thank you for your contribution!"}' https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$GITHUB_EVENT_PULL_REQUEST_NUMBER/comments
